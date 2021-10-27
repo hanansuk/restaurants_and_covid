@@ -1,0 +1,796 @@
+---
+title: 'Lab 2: Vacations and Vaccinations, Summer 2021. How COVID Response Impacted
+  Restaurants in Summer of 2021'
+date: "August 5, 2021"
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+authors: Saurav Bhomick, Hanan Sukenik, Katy Scott
+---
+
+# Introduction
+
+Federal, state, and local governments have all struggled to navigate the policy imperatives associated with public safety and economic hardship throughout periods of high infection and periods of recovery in the COVID19 pandemic. The variety of policy decisions made throughout the United States on measures like stay-at-home orders, mask mandates, travel restrictions, and vaccination distribution present an opportunity to examine positive and negative impacts of those choices. 
+
+Balancing the effects of pandemic-driven closures was and remains a challenge for decision-makers. As early as May 2020, experts highlighted the importance of sustaining shutdown measures to limit loss of life and long-lasting economic impact.^[https://www.cgdev.org/blog/protect-livelihoods-covid-19-prevent-another-health-catastrophe-low-and-middle-income-countries] At the same time, the unemployment caused by these shutdowns leads to increased health risks related to loss of medical benefits, increased stress, and housing uncertainty. 15 months after the first shutdowns occurred, many regions are still struggling to balance the costs and benefits of closures as more concerning virus variants emerge. In theory, more aggressive measures could produce better control of the virus and limit damage to communities, which would be better for the local economy in the long run. Conversely, the value destroyed by the shutdowns themselves from businesses closed and jobs lost have their own long lasting impacts.
+
+
+The National Restaurant Association reports that, prior to COVID-19, 41% of annual fine dining sales were from tourists and visitors to an area. Similarly, ¼ of spend in fast-casual and fast food came from tourists pre-pandemic.^[https://restaurant.org/articles/news/tourism-spending-in-restaurants-fell-sharply] Restaurant dining is an essential aspect of tourism, as it is rare that tourists are able to (or interested in) preparing all their own meals when travelling. In fact, satisfaction in restaurant experiences contributes strong support to tourist destination loyalty.^[https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8211172/]  There is a two-way, positive and perhaps even symbiotic relationship between the state of the restaurant industry and the state of tourism, when looking at a certain region or state. The more incoming tourism the state has, the better the situation of the dining industry will be due to higher demand. This also works the other way around- the more restaurants there are (which clearly relates to the restaurants' attendance), the more attractive the state/region will be for tourists.
+
+Like many tourism-related sectors, restaurants have been impacted by the pandemic. Stay-at-home orders were undertaken with the intention to halt the spread of the virus, protecting the public and enabling more rapid overall recovery for the local economy. These directly impacted restaurants by enforcing widespread closures. As communities re-open, restaurant attendance signals economic robustness in the local economy. By comparing restaurant attendance in the summer of 2021 to attendance in the same weeks of 2019, we examined whether or not states with more aggressive pandemic measures sustained more successful restaurant industries compared to states with less aggressive pandemic measures.
+
+```{r , echo=FALSE, out.width = '50%'}
+knitr::include_graphics("tourism.PNG")
+```
+
+
+Pre-COVID, restaurants accounted for 11 million jobs and 4% of the United States GDP.^[https://www.forbes.com/sites/forbesbusinesscouncil/2020/04/20/as-restaurants-go-so-goes-the-economy/?sh=47d916740ccc] Many restaurants are small businesses; their successes are good indicators of the robustness of local economies. Understanding the impact of stay-at-home order duration, vaccination rates, and mask mandates on summer 2021 restaurant attendance could offer insight into the impacts of these measures on local businesses. This intuition could inform future policy decisions to improve community resiliency or speed recovery for future pandemics.
+
+# Research Questions
+
+To understand COVID19 impacts on our selected tourism industry: restaurants, we asked the following research questions: 
+ 1. Was restaurant attendance in the US in June of 2021 higher in states which had more aggressive responses to COVID19? 
+ 2. How did pandemic policy choices and vaccine distribution from 2020 and early 2021 impact restaurant attendance in June 2021?
+
+We endeavored to build an explanatory model which would demonstrate causal positive and negative effects of policy choices and vaccination rates on restaurant attendance in June of 2021. 
+
+# Data
+
+OpenTable tracks and publishes restaurant attendance in regions with 50 or more restaurants enrolled in the OpenTable reservation app.^[https://www.opentable.com/state-of-industry] They compare restaurant attendance (reservations and walk-ins) for the region to attendance in the same region for the same day of the week in 2019, and provide the measure as a percent of the 2019 baseline. For example, if 1000 people dined in San Francisco on the first day of the 20th week of 2019 and 500 people dined in San Francisco on the first day of the 20th week of 2021, the published attendance result would be -50% for that day. If 1500 people dined in San Francisco on the first day of the 20th week of 2021, it would be 50%.
+For our study, we averaged this data across the month of June 2021 for each US State in the OpenTable dataset. This average restaurant attendance variable describes June 2021 restaurant attendance over a 2019 baseline. This is the dependent variable for the linear models we built for this study. 
+
+```{r, include=FALSE}
+install.packages("readxl")
+install.packages('corrplot')
+install.packages('psych')
+install.packages('jtools')
+install.packages('cowplot')
+
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(lmtest)
+library(sandwich)
+library(readxl)
+library(tidyverse)
+library(dplyr)
+library(stargazer)
+library(psych)
+library(corrplot)
+library(jtools)
+library(cowplot)
+library(kableExtra)
+```
+```{r include = FALSE}
+knitr::opts_chunk$set(fig.width=6, fig.height=4) 
+```
+
+```{r Data wrangling Read Data, include=FALSE}
+vax_data <- read.csv("./data_files/COVID-19_Vaccinations_in_the_United_States_Jurisdiction.csv")
+diner_data <- read.csv("./data_files/2020-2021vs2019_Seated_Diner_Data.csv")
+state_policy_data <- read_xlsx("./data_files/state_policy/COVID-19_US_state_policy_database_7_14_2021.xlsx")
+
+#head(vax_data) #filter state data
+#head(diner_data) #filter country data
+#head(state_policy_data)
+
+#unique(vax_data[c("MMWR_week")])
+#(colnames(diner_data))
+```
+
+```{r Data wrangling Filter Data, include=FALSE}
+state_policy_restaurant_data <- state_policy_data[,c('STATE','POSTCODE','STAYHOME','STEMERG','STEMERGEND','ALCREST','ALCDELIV','CLREST','ENDREST','RSTOUTDR','CLRST2','ENDREST2','CLRST3','END_CLRST3','VAC_ESSWORK','VAC_ADDWORK','END_STHM','FM_ALL','FM_ALL2','FM_END','FM_END2','QR_ALLST', 'QR_END', 'CLBSNS','END_BSNS','CURFEW','CURFEWEND','FMFINE','FMCITE','FMNOENF','CLOSEBAR','END_BRS')]
+#head(state_policy_restaurant_data)
+
+```
+
+```{r, include=FALSE}
+diner_june_2021_data <- diner_data %>% filter(Type=="state") 
+diner_june_2021_data <- diner_june_2021_data [,c('Type','Name','X2021.6.1','X2021.6.2','X2021.6.3','X2021.6.4','X2021.6.5','X2021.6.6','X2021.6.7','X2021.6.8','X2021.6.9','X2021.6.10','X2021.6.11','X2021.6.12','X2021.6.13','X2021.6.14','X2021.6.15','X2021.6.16','X2021.6.17','X2021.6.18','X2021.6.19','X2021.6.20','X2021.6.21','X2021.6.22','X2021.6.23','X2021.6.24','X2021.6.25','X2021.6.26','X2021.6.27','X2021.6.28','X2021.6.29','X2021.6.30')] 
+
+```
+
+```{r, include=FALSE}
+#diner_june_2021_data <- diner_june_2021_data %>% str_replace_all("%", "")
+diner_june_2021_data[,c(3:32)] <- as.data.frame(apply(diner_june_2021_data[,c(3:32)], 2, function(x) {as.numeric(gsub("%", "", x))}))
+head(diner_june_2021_data)
+diner_june_2021_data <- diner_june_2021_data %>% 
+mutate (
+   meanJune2021DinerSeatpercentage = rowMeans(diner_june_2021_data[,c(3:32)], na.rm=TRUE)
+)
+
+diner_june_2021_data <- diner_june_2021_data %>% select(-1,-(3:32))
+#head (diner_june_2021_data)
+```
+
+```{r, include=FALSE}
+
+weeks <- c(21) #extracting week of 31st May 2021 vaccination data
+
+vax_may_data <- vax_data %>% filter(Date=='05/31/2021')
+#vax_may_data
+
+
+vax_may_data <- vax_may_data [,c('Date','Location','Distributed','Administered','Series_Complete_Pop_Pct')]
+```
+
+```{r, include=FALSE}
+
+vax_may_mean_data <- vax_may_data %>% group_by(Location) %>% 
+  mutate(mean_vax_Distributed = mean(Distributed,na.rm=TRUE)) %>%
+
+  mutate(mean_vax_Administered = mean(Administered,na.rm=TRUE)) %>%
+
+  mutate(mean_vax_Series_Complete_Pop_Pct = mean(Series_Complete_Pop_Pct,na.rm=TRUE)) %>% select(Location, mean_vax_Distributed, mean_vax_Administered, mean_vax_Series_Complete_Pop_Pct)
+```
+
+
+```{r, include=FALSE}
+#Joining Diner Data with State Policy Date on STATE
+diner_state_policy_2021 <- inner_join(diner_june_2021_data,state_policy_restaurant_data,by=c("Name" = "STATE"),copy=FALSE)
+
+diner_vax_state_policy_2021 <- inner_join(vax_may_mean_data,diner_state_policy_2021,by=c("Location"="POSTCODE"),copy=FALSE)
+
+diner_vax_state_policy_2021 <- diner_vax_state_policy_2021 %>% distinct(.keep_all = TRUE)
+#diner_vax_state_policy_2021
+```
+
+```{r, include=FALSE}
+#adding duration variables. Using 44348 for any variable where the action started but did not end before the data was collected. 44348 (variable enddate) corresponds to June 1, 2021 
+enddate <-44348
+diner_vax_state_policy_2021_durs <- diner_vax_state_policy_2021 %>%
+  mutate(
+    Stay_home_duration = ifelse(STAYHOME == 0,0, ifelse(END_STHM == 0, enddate-as.numeric(STAYHOME), as.numeric(END_STHM) - as.numeric(STAYHOME))),
+    Mask_duration = ifelse(FM_ALL ==0,0,ifelse(as.numeric(FM_END) + as.numeric(FM_END2) == 0, enddate - as.numeric(FM_ALL) - as.numeric(FM_ALL2),as.numeric(FM_END) + as.numeric(FM_END2)- as.numeric(FM_ALL) - as.numeric(FM_ALL2) )),
+    Rest_closed_duration = ifelse(CLREST == 0,0, ifelse(as.numeric(ENDREST)+as.numeric(ENDREST2)+as.numeric(END_CLRST3)==0, enddate- as.numeric(CLREST),  as.numeric(ENDREST) - as.numeric(CLREST) + as.numeric(ENDREST2) - as.numeric(CLRST2) + as.numeric(END_CLRST3) - as.numeric(CLRST3))), 
+    Travel_duration = ifelse(QR_ALLST == 0,0, ifelse(as.numeric(QR_END)==0, enddate-as.numeric(QR_ALLST), as.numeric(QR_END) - as.numeric(QR_ALLST))),
+    Business_duration = ifelse(CLBSNS == 0, 0, ifelse(END_BSNS == 0, enddate - as.numeric(CLBSNS), as.numeric(END_BSNS) - as.numeric(CLBSNS))),
+    Curfew_duration = ifelse(CURFEW == 0, 0, ifelse(CURFEWEND == 0, enddate - as.numeric(CURFEW), as.numeric(CURFEWEND) - as.numeric(CURFEW))),
+    Bar_duration = ifelse(CLOSEBAR == 0, 0, ifelse(END_BRS == 0, enddate - as.numeric(CLOSEBAR), as.numeric(END_BRS)- as.numeric(CLOSEBAR))),
+    Emergency_duration = ifelse(STEMERG == 0, 0, ifelse(STEMERGEND == 0, enddate - as.numeric(STEMERG), as.numeric(STEMERGEND)- as.numeric(STEMERG)))
+  )
+
+#diner_vax_state_policy_2021_durs
+```
+
+
+
+```{r Further cleaning of the dataset from unnessasary variables and Renaming columns just for conveniance, include=FALSE}
+diner_vax_state_policy_2021_final <- diner_vax_state_policy_2021_durs[ , (names(diner_vax_state_policy_2021_durs) %in% c("Location", "mean_vax_Series_Complete_Pop_Pct", "Name", "meanJune2021DinerSeatpercentage", "RSTOUTDR", "Stay_home_duration", "Mask_duration", "Rest_closed_duration", "Travel_duration", "Business_duration", "Curfew_duration", "Bar_duration", "Emergency_duration"))]
+
+diner_vax_state_policy_2021_final <- diner_vax_state_policy_2021_final %>%
+  rename("State" = "Location", "Vaccinated_perc" = "mean_vax_Series_Complete_Pop_Pct", "State_short" = "Name", "Mean_diner_perc" = "meanJune2021DinerSeatpercentage", "Outdoor_only" = "RSTOUTDR", "Stay_home_dur" = "Stay_home_duration", "Mask_dur" = "Mask_duration", "Rest_closed_dur" = "Rest_closed_duration", "Travel_dur" = "Travel_duration", "Business_dur" = "Business_duration", "Curfew_dur" = "Curfew_duration", "Bar_closed_dur" = "Bar_duration", "Emergency_dur" = "Emergency_duration")
+
+diner_vax_state_policy_2021_final$Outdoor_only <- as.factor(diner_vax_state_policy_2021_final$Outdoor_only)
+
+#diner_vax_state_policy_2021_final
+```
+
+```{r, include=FALSE}
+#summary(diner_vax_state_policy_2021_final)
+```
+
+
+```{r Checking for NAs, include=FALSE}
+#sapply(diner_vax_state_policy_2021_final, function(x) sum(is.na(x)))
+```
+
+Independent variables for the models in this study are sourced from the COVID US State Policy Database^[https://github.com/USCOVIDpolicy/COVID-19-US-State-Policy-Database] and from the Centers for Disease Control.^[https://data.cdc.gov/Vaccinations/COVID-19-Vaccine-Distribution-Allocations-by-Juris/w9zu-fywh] 
+
+The COVID US Policy Database tracks several variables related to state policy for pandemic control. These include dates when certain measures started and stopped, including stay-at-home orders, mask mandates, travel quarantines, business and restaurant closures, and others. 
+
+A list of the variables we considered appears in the variable dictionary in Table 1.
+
+```{r, echo=FALSE}
+diner_vax_state_policy_2021_corr <- diner_vax_state_policy_2021_final[ , (!names(diner_vax_state_policy_2021_final) %in% c("State", "State_short"))]
+
+diner_vax_state_policy_2021_corr$Outdoor_only <- as.numeric(diner_vax_state_policy_2021_corr$Outdoor_only)
+
+var_table <- diner_vax_state_policy_2021_corr %>%
+  colnames()
+
+var_table <- var_table %>%
+  data.frame()
+
+names(var_table)[1] = "Variable"
+var_table$Details <- c("Percentage of fully vaccinated people (as of June 1st 2021)", "Mean percentage of diners in June 2021, compared to June 2019", "Initially opened restaurants for outdoor dining only? (binary)", "Stay home/shelter in place orders duration", "Face mask mendated in public spaces duration", "Duration of closed restaurants (except take out)", "Travel Restrictions Duration", "Duration of closed non-essential businesses", "Duration of closed businesses overnight", "Duration of closed bars", "Duration of state of emergency")
+
+var_table %>%
+  arrange(Variable) %>%
+  kbl(caption = "Variable Dictionary")
+```
+## Exploratory Data Analysis
+
+We conducted an exploratory data analysis in order to better understand our datasets before building the models. Our dependent variable, restaurant attendance as a percentage change  of 2019 attendance averaged over June 2021, included 40 states (with Washington DC). The attendance change averages ranged from a high of 43% above June 2019 (Nevada) to a low of -44% below June 2019 (Washington DC), with a mean of -7%. Though we didn’t use them, the entire OpenTable data set also included seating data from states in other countries like Canada, Australia, Mexico, and Germany. The maximum seating increase was in Queensland, Australia (120%); the minimum was in Manitoba, Canada (-86%).
+
+The US COVID Policy Database records start dates and end dates for various closures. Any lack of start or close (as in the case where there was never a closure or there was never a reopening) was marked as a 0. By taking deltas of the starts and close dates to assess duration, the zeros would drive outlier values in the dataset. We resolved this by adopting rules for the calculation. No start date would result in a duration of zero. No end date would terminate on June 1, 2021, the start of our study. This resolved data gaps and produced a data set that was useful for analysis.
+
+Most states adopted between roughly 1 and 3 months of stay-at-home orders, with the average duration for our states in the study landing at nearly exactly two months: 62 days. There were two outlier states with closures of over 300 days: California(312) at New Mexico (434). There were also some outliers with no stay-at-home orders at all: Texas, Utah, Nebraska, Kentucky, and Oklahoma. These clusters served to disrupt some linearity assumptions in our model, which we’ll discuss later in the report. 
+
+Most states implemented mask mandates lasting between 6 and 12 months long, resulting in an average of approximately 9 months. Again, there are clusters on opposite ends of the distribution: Michigan, Illinois, Rhode Island, Connecticut, New Jersey, and New York all had mask mandates which lasted longer than 400 days. Georgia, Arizona, Missouri, South Carolina, Tennessee, Oklahoma, Nebraska, and Florida all had no mask mandates at all. 
+
+All states closed their restaurants for at least some duration, with an average of 88 days. California’s restaurant closure was by far the longest at 339 days. Oregon and New Mexico were the only other 2 states which had closures longer than 8 months. Georgia was the only state under one month at 24 days; all the others fell between. Bar closures followed a similar pattern. All states closed their bars, with durations between 42 and 456 days. 
+
+Only 9 states had travel quarantines, and they ranged from 21 days (Utah) to 465 days (Rhode Island). About half of the states implemented curfews during the pandemic, and their durations varied widely, from 28 days in New Mexico to 290 days in Kentucky. 
+
+All states called a state of emergency, most were longer than 14 months. Michigan was a short outlier at 290 days; the average duration for states of emergency was 450 days. California’s state of emergency was 454 days long. This was two days shorter than their bar closure. Thankfully for California residents, both emergencies ended near the same time. 
+
+All states had business closures, averaging at 46 days duration. South Carolina’s was shortest at 19 days long. New York closed it’s non-essential businesses longest, for 78 days.   
+The vaccine data provided by the CDC included vaccination rates (fully vaccinated as a percent of the population) by state. It also included rates for some other non-state jurisdictions, like the Bureau of Prisons, Indian Health Services, Department of Defense, and others, each spanning multiple states. These non-states were excluded from our analysis when we did the dataframe merge. This assumes that the vaccination rates reflected in these jurisdictions do not differ substantially from the states they fall within (or that they reflect vaccines outside the US). At the beginning of June, our average state vaccination percentage was 42%. Alabama lagged the pack at 29%; Maine was already at 54% by then.
+
+
+## Variable Selection and Operationalization
+
+In selecting variables for inclusion in the model, we chose policy decisions which were likely to affect the robustness of the restaurant industry, whether directly or indirectly. 
+
+Stay-at-home orders were frequently cited in the media as decimating the restaurant industry. By requiring people to stay home, and prepare or order their own food, restaurants were only able to survive via home delivery services. Including stay-at-home orders, we hoped to capture the change in attendance that could have resulted from restaurant closures. This variable could also capture the effect of changing habits in the restaurant customer base: people may now choose to dine in more, having become better home cooks or more accustomed to delivery. Finally, stay-at-home order duration also has the potential to capture and positive effects of the shutdowns, if for example they created better confidence in local and visiting patrons by successfully suppressing COVID cases. 
+
+
+The fully vaccinated portion of the population can more safely eat inside. Vaccinated people are also able to travel more freely. By including vaccination rate in the model, we hoped to capture the benefits of a vaccinated population on the local economy, and the benefits of more travel and tourism on restaurant attendance. 
+
+Mask mandate duration was included as a signal to the relative openness of the region. We were curious to see if states with conservative mask policies would have residents who were more cautious about restaurant attendance. Conversely, would there be more restaurant dining in places that had not had mask mandates, or at least not for very long. 
+
+Business closures duration was included as an economic indicator. Closure of non-essential businesses meant less discretionary income for many service industry and hospitality industry workers. It follows that the longer these businesses were closed, the greater impact on restaurant sales throughout the pandemic, and on available cash to spend at restaurants in June. 
+
+Curfew duration was included as a potential impact to restaurants who rely on in-restaurant bars and late dining. A region with a curfew which prevents late nights out may significantly impact restaurants in areas which traditionally thrived on night-life. Bar closures is a similar, but more focused variable.  
+
+State of Emergency duration was considered as a broader indicator of the level of control and support the state asserted on the pandemic. States of Emergency enable special actions to be taken by the state government. For example, California’s state of emergency, called in March of 2020, enabled diversion and deployment of PPE to healthcare workers and prevented price gouging for essential materials.
+
+A correlation matrix supported selection of variables which had minimal correlation. From the graphic below, we chose a subset which would be expected to have no perfect collinearity. This supports the use of a classic linear model in our regression analysis.
+
+
+
+```{r, include=FALSE}
+# rest_outdoor <- diner_vax_state_policy_2021_final %>%
+#   ggplot()+
+#   geom_bar(aes(x= Outdoor_only), fill = "#0c4c8a")+
+#   theme_minimal()
+
+#rest_outdoor
+```
+
+
+
+
+```{r echo=FALSE, warning=FALSE}
+corrplot::corrplot(cor((diner_vax_state_policy_2021_corr)), method = "color",order="AOE", 
+diag=FALSE, addCoef.col = "black", addCoefasPercent = TRUE, tl.cex=0.9, number.cex=0.8)
+
+```
+
+As displayed above, restaurant closure duration is highly correlated with stay-at-home order duration. For this reason we chose only one of the pair: stay-at-home order duration. 
+
+We operationalized our policy variables by subtracting end and start dates to arrive at durations for given measures; when orders started and stopped multiple times, their durations were summed to get a total duration. When a state never implemented a measure, the duration is recorded as zero. When the duration did not end, the days were counted until Jun 1, 2021, the beginning of our outcome variable range. 
+
+The Center for Disease Control tracks and publishes data on vaccine distribution, including counts of first and second doses, as well as the percent of the population (by state) who are fully vaccinated. For our study, we used the percent of the population which was fully vaccinated in each state by June 1, 2021.
+
+
+Each variable was examined for linearity and distribution, and many were transformed using logarithms to improve satisfaction of assumptions. The histograms which follow illustrate the need for and outcome of transformations performed. 
+
+```{r, echo=FALSE, warning=FALSE}
+Dining_hist <- diner_vax_state_policy_2021_final %>%
+  ggplot()+
+  geom_histogram(aes(x= Mean_diner_perc), binwidth = 10L, fill = "#6D5c9c", col = "white")+
+  theme_minimal() +
+  labs(
+    title = "Mean Change in # of Diners from 2019 to 2021 (June)",
+    subtitle = "Distribution is approximately normal (No transformation needed)",
+    x = 'Mean Change in Number of Diners (%)',
+    y = 'Number of States'
+      )
+
+Dining_hist
+```
+ 
+ 
+ 
+```{r echo=FALSE, warning=FALSE}
+vaccinated_hist <- diner_vax_state_policy_2021_final %>%
+  ggplot()+
+  geom_histogram(aes(x= Vaccinated_perc), bins = 20L, fill = "#0c4c8a", col = "gray")+
+  theme_minimal() +
+  labs(
+    title = "Vaccination Rates Distribution (as of June 1st, 2021)",
+    subtitle = "No transformations improve the distribution",
+    x = '% Vaccinated of Total Population',
+    y = 'Number of States'
+   ) 
+
+vaccinated_hist
+```
+
+
+```{r include=FALSE, warning=FALSE}
+policy_hist_stay <- diner_vax_state_policy_2021_final %>%
+  ggplot()+
+  geom_histogram(aes(x= Stay_home_dur ), bins = 20L, fill = "#0c4c8a", col = "gray")+
+  theme_minimal() +
+  labs(
+    title = "Stay Home Orders Duration Distribution by State",
+    subtitle = "Distribution is skewed",
+    x = 'Length of Stay Home Orders',
+    y = 'Number of States'
+  ) 
+```
+
+
+
+```{r Plotting transformed variable stay home, echo=FALSE, warning=FALSE}
+policy_hist_stay_trans <- diner_vax_state_policy_2021_final %>%
+  ggplot()+
+  geom_histogram(aes(x= log(Stay_home_dur) ), bins = 20L, fill = "darkred", col = "gray")+
+  theme_minimal() +
+  labs(
+    title = "                                           ",
+    subtitle = "Log Distribution is less skewed",
+    x = 'Length of Stay Home Orders (log)',
+    y = 'Number of States'
+   )
+
+plot_grid(policy_hist_stay, policy_hist_stay_trans)
+```
+
+```{r include=FALSE, warning=FALSE}
+policy_hist_mask <- diner_vax_state_policy_2021_final %>%
+  ggplot()+
+  geom_histogram(aes(x= Mask_dur), bins = 25L, fill = "#0c4c8a", col = "gray")+
+  theme_minimal() +
+  labs(
+    title = "Mask Orders Duration Distribution by State",
+    subtitle = "Distribution is skewed",
+    x = 'Length of Mask Mandate',
+    y = 'Number of States'
+   ) 
+```
+
+```{r Plotting transformed variable mask, , echo=FALSE, warning=FALSE}
+policy_hist_mask_trans <- diner_vax_state_policy_2021_final %>%
+  ggplot()+
+  geom_histogram(aes(x= log(Mask_dur)), bins = 25L, fill = "darkred", col = "gray")+
+  theme_minimal() +
+  labs(
+    title = "                          ",
+    subtitle = "Log Distribution is less skewed",
+    x = 'Length of Mask Mandate (log)',
+    y = 'Number of States'
+   ) 
+
+plot_grid(policy_hist_mask, policy_hist_mask_trans)
+```
+
+```{r, include=FALSE, warning=FALSE}
+policy_hist_rest <- diner_vax_state_policy_2021_final %>%
+  ggplot()+
+  geom_histogram(aes(x= Rest_closed_dur), bins = 25L, fill = "#0c4c8a", col = "gray")+
+  theme_minimal() +
+  labs(
+    title = "Restaurant Closure Orders Duration Distribution by State",
+    subtitle = "Distribution is skewed",
+    x = 'Length of Restaurant Closure',
+    y = 'Number of States'
+   ) 
+```
+
+```{r Plotting transformed variable rest, echo=FALSE, warning=FALSE}
+policy_hist_rest_trans <- diner_vax_state_policy_2021_final %>%
+  ggplot()+
+  geom_histogram(aes(x= log(Rest_closed_dur)), bins = 25L, fill = "darkred", col = "gray")+
+  theme_minimal() +
+  labs(
+    title = "                                    ",
+    subtitle = "Log Distribution is more normal",
+    x = 'Length of Restaurant Closure (log)',
+    y = 'Number of States'
+   ) 
+
+plot_grid(policy_hist_rest, policy_hist_rest_trans)
+```
+
+```{r include=FALSE, warning=FALSE}
+policy_hist_travel <- diner_vax_state_policy_2021_final %>%
+  ggplot()+
+  geom_histogram(aes(x= Travel_dur), bins = 20L, fill = "#0c4c8a", col = "gray")+
+  theme_minimal() +
+  labs(
+    title = "Travel Restriction Orders Duration Distribution by State",
+    subtitle = "Distribution is highly skewed",
+    x = 'Length of Travel Restrictions',
+    y = 'Number of States'
+   ) 
+```
+
+```{r Plotting transformed variable travel, echo=FALSE, warning=FALSE}
+policy_hist_travel_trans <- diner_vax_state_policy_2021_final %>%
+  ggplot()+
+  geom_histogram(aes(x= log(Travel_dur)), bins = 20L, fill = "darkred", col = "gray")+
+  theme_minimal() +
+  labs(
+    title = "                          ",
+    subtitle = "Distribution is still highly skewed",
+    x = 'Length of Travel Restrictions (log)',
+    y = 'Number of States'
+   ) 
+
+plot_grid(policy_hist_travel, policy_hist_travel_trans)
+```
+
+```{r, include=FALSE, warning=FALSE}
+policy_hist_business <- diner_vax_state_policy_2021_final %>%
+  ggplot()+
+  geom_histogram(aes(x= Business_dur), bins = 10L, fill = "#0c4c8a", col = "gray")+
+  theme_minimal() +
+  labs(
+    title = "Non-Essential Business Closure Orders Duration Distribution by State",
+    subtitle = "Distribution is slightly skewed",
+    x = 'Length of business closure',
+    y = 'Number of States'
+      )
+```
+
+```{r Plotting transformed variable business, echo=FALSE, warning=FALSE}
+policy_hist_business_trans <- diner_vax_state_policy_2021_final %>%
+  ggplot()+
+  geom_histogram(aes(x= log(Business_dur)), bins = 10L, fill = "darkred", col = "gray")+
+  theme_minimal() +
+  labs(
+    title = "                          ",
+    subtitle = "Distribution is more normal",
+    x = 'Length of business closure (log)',
+    y = 'Number of States'
+   ) 
+
+plot_grid(policy_hist_business, policy_hist_business_trans)
+```
+
+
+```{r, include=FALSE, warning=FALSE}
+policy_hist_curfew <- diner_vax_state_policy_2021_final %>%
+  ggplot()+
+  geom_histogram(aes(x= Curfew_dur), bins = 30L, fill = "#0c4c8a", col = "gray")+
+  theme_minimal() +
+  labs(
+    title = "Curfew Orders Duration Distribution by State",
+    subtitle = "Distribution is highly skewed",
+    x = 'Length of Curfew',
+    y = 'Number of States'
+      )
+```
+
+
+```{r Plotting transformed variable curfew, echo=FALSE, warning=FALSE}
+policy_hist_curfew_trans <- diner_vax_state_policy_2021_final %>%
+  ggplot()+
+  geom_histogram(aes(x= log(Curfew_dur)), bins = 30L, fill = "darkred", col = "gray")+
+  theme_minimal() +
+  labs(
+    title = "                          ",
+    subtitle = "Distribution is more normal",
+    x = 'Length of curfew (log)',
+    y = 'Number of States'
+   ) 
+
+plot_grid(policy_hist_curfew, policy_hist_curfew_trans)
+```
+
+```{r, include=FALSE, warning=FALSE}
+policy_hist_bar <- diner_vax_state_policy_2021_final %>%
+  ggplot()+
+  geom_histogram(aes(x= Bar_closed_dur), bins = 20L, fill = "#0c4c8a", col = "gray")+
+  theme_minimal() +
+  labs(
+    title = "Bar Closure Duration Distribution by State",
+    subtitle = "Distribution is highly skewed",
+    x = 'Length of bar closure',
+    y = 'Number of States'
+      )
+```
+
+
+```{r Plotting transformed variable bar, echo=FALSE, warning=FALSE}
+policy_hist_bar_trans <- diner_vax_state_policy_2021_final %>%
+  ggplot()+
+  geom_histogram(aes(x= log(Bar_closed_dur)), bins = 20L, fill = "darkred", col = "gray")+
+  theme_minimal() +
+  labs(
+    title = "                          ",
+    subtitle = "Distribution is more normal",
+    x = 'Length of bar closure (log)',
+    y = 'Number of States'
+   ) 
+
+plot_grid(policy_hist_bar, policy_hist_bar_trans)
+```
+
+```{r, include=FALSE, warning=FALSE}
+emergency_hist <- diner_vax_state_policy_2021_final %>%
+  ggplot()+
+  geom_histogram(aes(x= Emergency_dur), bins = 30L, fill = "#0c4c8a", col = "gray")+
+  theme_minimal() +
+  labs(
+    title = "Emergency State Duration Distribution by State",
+    subtitle = "Distribution is highly skewed",
+    x = 'Length of Emergency State',
+    y = 'Number of States'
+      )
+```
+
+
+```{r Plotting transformed variable emergency, echo=FALSE, warning=FALSE}
+emergency_hist_trans <- diner_vax_state_policy_2021_final %>%
+  ggplot()+
+  geom_histogram(aes(x= log(Emergency_dur)), bins = 30L, fill = "darkred", col = "gray")+
+  theme_minimal() +
+  labs(
+    title = "                          ",
+    subtitle = "Distribution is still skewed",
+    x = 'Length of Emergency State (log)',
+    y = 'Number of States'
+   ) 
+
+plot_grid(emergency_hist, emergency_hist_trans)
+```
+
+```{r Removing outliers, include=FALSE}
+outliers <- boxplot(diner_vax_state_policy_2021_final$Vaccinated_perc, plot=FALSE)$out
+#dinerdiner_vax_state_policy_2021_final <- if(length(outliers) > 0) {diner_vax_state_policy_2021_final <- diner_vax_state_policy_2021_final[-which(diner_vax_state_policy_2021_final$Vaccinated_perc %in% outliers),]} else{diner_vax_state_policy_2021_final}
+
+outliers <- boxplot(diner_vax_state_policy_2021_final$Stay_home_dur, plot=FALSE)$out
+#diner_vax_state_policy_2021_final <-  if(length(outliers) > 0) {diner_vax_state_policy_2021_final[-which(diner_vax_state_policy_2021_final$Stay_home_dur %in% outliers),]} else{diner_vax_state_policy_2021_final}
+
+outliers <- boxplot(diner_vax_state_policy_2021_final$Mean_diner_perc, plot=FALSE)$out
+#diner_vax_state_policy_2021_final <-  if(length(outliers) > 0) {diner_vax_state_policy_2021_final[-which(diner_vax_state_policy_2021_final$Mean_diner_perc %in% outliers),]} else{diner_vax_state_policy_2021_final}
+
+outliers <- boxplot(diner_vax_state_policy_2021_final$Mask_dur, plot=FALSE)$out
+#diner_vax_state_policy_2021_final <-  if(length(outliers) > 0) {diner_vax_state_policy_2021_final[-which(diner_vax_state_policy_2021_final$Mask_dur %in% outliers),]} else{diner_vax_state_policy_2021_final}
+
+outliers <- boxplot(diner_vax_state_policy_2021_final$Business_dur, plot=FALSE)$out
+print(outliers)
+#diner_vax_state_policy_2021_final <-  if(length(outliers) > 0) {diner_vax_state_policy_2021_final[-which(diner_vax_state_policy_2021_final$Business_dur %in% outliers),]} else{diner_vax_state_policy_2021_final}
+
+
+print(nrow(diner_vax_state_policy_2021_final))
+```
+
+```{r Creating transformed variables, include=FALSE}
+diner_vax_state_policy_2021_final <- diner_vax_state_policy_2021_final %>%
+  mutate(
+    logof_Stay_home_dur = case_when(Stay_home_dur==0 ~ 0, TRUE ~ log(Stay_home_dur)),
+    logof_Mask_dur = case_when(Mask_dur==0 ~ 0, TRUE ~ log(Mask_dur)),
+    logof_Rest_closed_dur = case_when(Rest_closed_dur==0 ~ 0, TRUE ~ log(Rest_closed_dur)),
+    logof_Business_dur = case_when(Business_dur==0 ~ 0, TRUE ~ log(Business_dur)),
+    logof_Curfew_dur = case_when(Curfew_dur==0 ~ 0, TRUE ~ log(Curfew_dur)),
+    logof_Bar_closed_dur = case_when(Bar_closed_dur==0 ~ 0, TRUE ~ log(Bar_closed_dur))
+  )
+```
+
+# Model
+
+The variables selected for our model along with their transformations and any reasons for exclusion appear in Table 2. 
+
+```{r echo=FALSE}
+var_table <- diner_vax_state_policy_2021_corr %>%
+  colnames()
+
+var_table <- var_table %>%
+  data.frame()
+
+names(var_table)[1] = "Variable"
+var_table$Details <- c("Percentage of fully vaccinated people (as of June 1st 2021)", "Mean percentage of diners in June 2021, compared to June 2019", "Initially opened restaurants for outdoor dining only? (binary)", "Stay home/shelter in place orders duration", "Face mask mendated in public spaces duration", "Duration of closed restaurants (except take out)", "Travel Restrictions Duration", "Duration of closed non-essential businesses", "Duration of closed businesses overnight", "Duration of closed bars", "Duration of state of emergency")
+
+#var_table %>%
+#  arrange(Variable) %>%
+#  kbl(caption = "Variable Dictionary")
+```
+
+
+```{r, echo=FALSE}
+var_table_2 <- arrange(var_table[1], Variable)
+
+var_table_2$Transformation <- c("Log", "Log", "Log", "None", "Log", "None", "None", "Log", "Log", "None", "None")
+var_table_2$Included_in_Model <- c("No", "Yes", "Yes", "No", "Yes", "Yes", "No", "No", "Yes", "No", "Yes")
+var_table_2$Reason_If_Not <- c("High correlation with other variables", "-", "-", "High skew", "-", "-", "High correlation with other variables", "High correlation with Stay_home_dur",  "-", "High skew", "-" )
+
+var_table_2 %>%
+  arrange(Variable) %>%
+  kbl(caption = "Variables Included and Transformations")
+```
+
+We used ordinary least squares regression to model the effect of our selected independent variables on the dependent variable, with the intention of demonstrating causal relationships where statistically significant. 
+
+To avoid confounding effects of time on our model, the independent variables were gathered from the time period preceding June 1, 2021. The data were either summed or averaged as appropriate. The dependent variable was averaged across the month of June 2021. 
+
+Our null hypothesis for this study was:
+
+*US state pandemic policy decisions and vaccination rates have no explanatory effect for restaurant attendance in June, 2021.*
+
+Stay-at-home duration was expected to have the strongest causal relationship with restaurant attendance in June 2021, so a linear regression was conducted first with restaurant attendance as the dependent variable and stay-at-home order duration as independent. Model 2 has stay-at-home duration but includes vaccine percentages as well. Finally, Model 3 has those two independent variables along with multiple additional covariates, including transforms of mask mandate duration, business closure duration, and curfew duration.
+
+```{r Fitting 3 different linear models, echo=FALSE}
+model_1 <- lm(Mean_diner_perc ~ logof_Stay_home_dur , data = diner_vax_state_policy_2021_final)
+
+model_2 <- lm(Mean_diner_perc ~  logof_Stay_home_dur + Vaccinated_perc + logof_Mask_dur, data = diner_vax_state_policy_2021_final)
+
+model_3 <- lm(Mean_diner_perc ~ logof_Stay_home_dur + Vaccinated_perc + logof_Mask_dur + logof_Business_dur + logof_Curfew_dur, data = diner_vax_state_policy_2021_final)
+
+# model_4 <- lm(log(Mean_diner_perc + 45) ~ log(Stay_home_dur+0.01) + Vaccinated_perc +  log(Mask_dur+0.01), data = diner_vax_state_policy_2021_final)
+
+```
+
+We were unable to fully satisfy many of the assumptions of the classical linear model with our data sets, but highlight here that the requirement for normally distributed errors was achieved by all three models.
+
+```{r code and plots assessing normally distributed errors, echo=FALSE}
+m1 <- broom::augment(model_1)
+m2 <- broom::augment(model_2)
+m3 <- broom::augment(model_3)
+#m4 <- broom::augment(model_4)
+
+
+m1hist <- m1 %>% 
+  ggplot() +
+  aes(x=.resid) +
+  geom_histogram(binwidth=2,fill="#69b3a2", color="#e9ecef",alpha=0.9)+
+  xlab("Model 1 Residuals")
+
+m2hist <- m2 %>% 
+  ggplot() +
+  aes(x=.resid) +
+  geom_histogram(binwidth=2,fill="#69b3a2", color="#e9ecef",alpha=0.9)+
+  xlab("Model 2 Residuals")
+
+m3hist <- m3 %>% 
+  ggplot() +
+  aes(x=.resid) +
+  geom_histogram(binwidth=2,fill="#69b3a2", color="#e9ecef",alpha=0.9)+
+  xlab("Model 3 Residuals")
+
+
+plot_grid(m1hist, m2hist, m3hist)
+
+#m4 %>% 
+#  ggplot() +
+#  aes(x=.resid) +
+#  geom_histogram(binwidth=2,fill="#69b3a2", color="#e9ecef",alpha=0.9)
+```
+# Regression Table
+
+The table below compares the coefficients for each variable in our three models. 
+
+```{r, warning=FALSE, echo=FALSE}
+stargazer(model_1, model_2, model_3, column.labels=c("Model 1","Model 2", "Model 3"),   
+          title= "Linear Models Comparison", type="text", align=TRUE, model.numbers=FALSE)
+```
+
+
+It is clear that stay-at-home order duration has a statistically significant coefficient for all three model versions, but adding the other variables lends no additional strength to the models. Model 1 has a stronger adjusted R-squared value than Model 2 and the fewest degrees of freedom lost. We note that the value and significance of the coefficient for the log of stay-at-home order duration remains consistent across the three models, and decreases in effect somewhat with the addition of covariates. This supports confidence in the coefficient, but also highlights concerns with potential omitted variable bias which we explore later in this report. 
+
+Based on the output of Model 1, we can reject the null hypothesis. The practical significance indicated by this model is that a 10% increase in stay-at-home order duration would decrease June 2021 restaurant attendance (versus June 2019 attendance) by approximately 0.5%.
+
+
+
+```{r  matrix for selected to get an idea of the correlations, echo=FALSE}
+#pairs.panels(diner_vax_state_policy_2021_final[ , (names(diner_vax_state_policy_2021_final) #%in% c("Mean_diner_perc", "logof_Stay_home_dur", "Vaccinated_perc", "logof_Mask_dur", #"logof_Business_dur", "logof_Curfew_dur"))], 
+#             method = "pearson", # correlation method
+#             hist.col = "#00AFBB",
+#             density = TRUE,  # show density plots
+#             ellipses = TRUE # show correlation ellipses
+#             )
+```
+```{r model summaries, echo=FALSE}
+
+
+#summary(model_1)
+#summary(model_2)
+#summary(model_3)
+#summary(model_4)
+```
+
+
+# Omitted Variable Bias
+
+There are many factors besides pandemic policy decisions which affect restaurant attendance. These include wealth in the community (measured as GDP), covid cases in June 2021, and the availability or ubiquity of food delivery services. Each of these factors could drive biases in our model.
+
+## Household Income
+
+The availability of disposable income is known to impact restaurant patronage. The  Bureau of Labor Statistics published data which showed that, in 2018, nearly two thirds of restaurant spending came from households with incomes above $70,000.^[https://restaurant.org/articles/news/growth-in-higher-income-households]. Especially in communities with industries who fared well throughout the pandemic like technology and government,^[https://www.brookings.edu/research/explaining-the-economic-impact-of-covid-19-core-industries-and-the-hispanic-workforce/] more people would be able to afford trips to restaurants in June 2021. Conversely, communities dependent on tourism and entertainment would expect to have fewer people able to spend the premium to consume their food at restaurants. 
+
+Household income is expected to correlate positively with restaurant attendance, and negatively with stay-at-home order duration. This would have the effect of pushing our already negative coefficient farther from zero. This effect is expected to be small. The loss of income associated with stay-at-home orders most significantly impacts the hospitality industry, which has a median income of $35,000 per year.^[https://www.talent.com/salary?job=hospitality#:~:text=Find%20out%20what%20the%20average%20Hospitality%20salary%20is&text=The%20average%20hospitality%20salary%20in,up%20to%20%2490%2C038%20per%20year.] Loss of income in that range  is less likely to effect the patronage of restaurants 
+
+## COVID cases
+
+A local peak in coronavirus illness for a given state would be expected to depress restaurant attendance. With more families struggling to weather mild to severe illnesses in their households, we would expect restaurant attendance to dip in those areas. 
+
+COVID illnesses in June 2021 would be expected to drive restaurant attendance down in that month. That illness rate is expected to have a negative correlation to duration of stay-at-home orders. Together, these effects produce a positive bias that would push our negative coefficient closer to zero. This effect is expected to be small to negligible within the time frame observed, as covid case count was universally low throughout the United States in June of 2021. However, if this analysis were repeated to observe another time period which had high case rates, this bias could be strong.  
+
+
+## Food delivery
+
+By late November of 2020, food delivery services like Grubhub and Doordash had more than doubled in activity over pre-pandemic levels.^[https://www.marketwatch.com/story/the-pandemic-has-more-than-doubled-americans-use-of-food-delivery-apps-but-that-doesnt-mean-the-companies-are-making-money-11606340169] These services enabled citizens to continue accessing restaurant food during stay-at-home orders and other closures. While there is debate over how beneficial these services are to the restaurants and drivers that support them, the availability of these options could have a negative impact on restaurant attendance in regions where food delivery services are strong. 
+
+Food delivery would is expected to increase in areas with active stay-at-home orders, and decrease restaurant attendance if available as a reliable and varied option for in-home dining. This would produce a negative omitted variable bias which would push our negative coefficient for stay-home-duration farther from zero. As restaurant attendance and at-home delivery occupy the same economic space, and satisfy a similar need, the tension between these two variables is strong, and could weaken the claims made by our model.
+
+## Non-compliance
+
+States might see attendance in restaurants depend on how compliant or non-compliant patrons are to local ordinances. A less compliant populous would be more likely to dine at a restaurant despite guidance or requirements not to. This omitted variable would have a positive effect on restaurant attendance. It would likely trend positively with stay-at-home duration, as non-compliant people are more likely to break rules the longer they are in place. These factors together would have a positive omitted variable bias, and would push our coefficient closer to zero. 
+
+## Changing preferences
+
+A final omitted variable to consider is the change in patron habits as a result of living through the pandemic. Stay-at-home orders and restaurant closures increased the availability and quality of home food delivery services. Many people became more proficient cooks, some adopting cooking and baking as a new hobby. Enjoyment of home dining may have increased for many, which could have the effect of diminishing restaurant attendance. This variable would trend positive with duration of stay-at-home orders and would reduce restaurant attendance. The omission would therefore apply a negative bias on our negative coefficient for stay-at-home duration, pushing it farther away from zero.
+
+
+# Limitations of the Model
+
+Use of the OpenTable data set constrained our dataset to 39 data points for our dependent variable. With a relatively low sample size, the model should satisfy classical linear model assumptions to ensure our statistical tests are valid.
+
+The first assumption, that the data we used be independent and identically sampled random variables, is difficult to satisfy if we intend the model to represent a population of all restaurants in the United States. The OpenTable data set only includes states which had 50 or more restaurants using OpenTable in both 2019 and 2021. OpenTable is popular (nearly 60,000 restaurants use OpenTable globally), but only restaurants who take reservations use it. There are more than 660,000 restaurants in the United States. Small restaurants, fast food restaurants, and restaurants in small towns are less likely to register with the service. This had the effect of excluding 12 states from the study, most of them lower in population and less urban than others. For this reason, the population for this study should be considered sit-down restaurants in states with above-average population density. With this constraint, IID is satisfied.
+
+Because our data set is relatively small, we tested classical linear model assumptions to ensure model validity. In order to satisfy the requirement of linear conditional expectation, we generated plots of model output versus each variable to observe linearity. The plots for Model 1, below, show that there is a challenge satisfying linearity against the stay-at-home duration variable, due mainly to clustering and spread. The plot of residuals versus fitted values reveals approximate linearity, but the claim is soft.
+
+```{r linear conditional exp, echo=FALSE}
+
+par(mfrow=c(1,2))
+plot(x= diner_vax_state_policy_2021_final$logof_Stay_home_dur, y=diner_vax_state_policy_2021_final$Mean_diner_perc, xlab= "Stay-at-home dur (log)", ylab= "Mean diner pct")
+abline(model_1)
+plot(model_1, which=1)
+mtext("Model 1 Conditional Linear Expectation",side = 3, line = -1, outer = TRUE)
+
+```
+
+Residuals versus fitted plots for the other two models also nearly satisfy linearity, slightly improved over Model 1; see below. 
+
+```{r more residuals, echo=FALSE}
+
+par(mfrow=c(1,2))
+plot(model_2, which=1)
+plot(model_3, which=1)
+mtext("Models 2 and 3 Residuals",side = 3, line = -1, outer = TRUE)
+```
+
+
+Our classical linear model also requires homoskedastic errors. The plots below show distributions of model residuals, which appear to homoskedastic upon observation.
+
+
+```{r, echo=FALSE}
+plot(model_1, which=3)
+plot(model_2, which=3)
+plot(model_3, which=3)
+#plot(model_4, which=3)
+```
+
+However, we performed the  Breusch-Pagan test on each model and failed to reject the null hypothesis for all three models:
+
+```{r, echo=FALSE}
+bptest(model_1)
+bptest(model_2)
+bptest(model_3)
+#bptest(model_4)
+```
+
+
+
+Because we fail to reject the null for homoskedasticity, we include a coefficient t-test of Model 1 with the inclusion of robust standard errors. This test confirms the statistical significance with a 95% confidence interval for our coefficient for Model 1:
+
+
+
+```{r, echo = FALSE}
+coeftest(model_1, vcovHC)
+
+```
+# Conclusion
+
+While the result from our models was statistically significant for the stay-at-home order variable was statistically significant, the small size of the data set (40 states), along with a failure to satisfy the assumption of linear conditional expectation, limit the strength of the claims we can make based on this result. Recalling that our sample is only representative of seated restaurants in areas with average-to-high population density, our study fails to fully address the research question. Overall, restaurant attendance declined in the states we studied when comparing June 2021 to June 2019.  
+
+We conclude that longer stay-at-home orders had a negative impact on restaurant attendance in June of 2021. Stay-at-home order duration had a statistically significant causal effect on attendance, but no other observed policy or vaccination variables did. The magnitude of effect was likely amplified by omitted variables, so the coefficient in our regression should not be used for quantitative purposes.
+
+It is possible that the long-term merits of the more aggressive policy choices and better vaccination uptake have not yet manifested. After all, the pandemic is still underway. We would recommend repeating this study in one year (with June 2022 data) to see if results have changed. If by-state data becomes available for food delivery services, and if more states are included in the OpenTable data set in future, repeating this model with the omitted variable for food delivery included, and use of a larger data set would improve its robustness. 
+
+Finally, it would be interesting to understand the lasting, post-pandemic impacts of COVID on our travel and dining habits. Shifts in the dining industry away from restaurants and toward home may be with us to stay. Future use of these same data sets could reveal more permanent impacts of the pandemic. 
+
+<!-- # References -->
+
+<!-- 1. OpenTable, State of the Industry report, Retrieved July 19, 2021, from https://www.opentable.com/state-of-industry -->
+
+<!-- 2. CUSP (COVID-19 US State Policies), COVID-19 US State Policy Database, Retrieved July 21, 2021, from https://github.com/USCOVIDpolicy/COVID-19-US-State-Policy-Database -->
+
+<!-- 3. CDC (Centers for Disease Control and Prevention), COVID-19 Vaccinations in the United States,Jurisdiction, Retrieved July 21, 2021, from https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-Jurisdi/unsk-b7fc -->
