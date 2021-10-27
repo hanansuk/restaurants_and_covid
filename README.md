@@ -1,4 +1,4 @@
-## Vacations and Vaccinations, Summer 2021. How COVID Response Impacted Restaurants in Summer of 2021.
+## Vacations and Vaccination- How COVID Response Impacted Restaurants in Summer of 2021
 
 ### Saurav Bhomick, Hanan Sukenik, Katy Scott
 
