@@ -1,6 +1,6 @@
 ## Vacations and Vaccinations, Summer 2021. How COVIDResponse Impacted Restaurants in Summer of 2021
 
-### Hanan Sukenik
+### Saurav Bhomick, Hanan Sukenik, Katy Scott
 
 Federal, state, and local governments have all struggled to navigate the policy imperatives associated with
 public safety and economic hardship throughout periods of high infection and periods of recovery in the
@@ -13,7 +13,7 @@ research questions:
 aggressive responses to COVID19? 
 2. How did pandemic policy choices and vaccine distribution from 2020 and early 2021 impact restaurant attendance in June 2021?
 
-Through this project, I will:
+Through this project, we will:
 
 - Describe the reaseach questions and the data
 - Explore the datasets
